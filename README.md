@@ -205,13 +205,13 @@ pytest tests/ -v
 
 ## Danh sách kiểm tra nộp bài
 
-- [ ] `pytest tests/ -v` — tất cả kiểm thử đều pass
-- [ ] `overall_score` trên `EvalResult` đã triển khai
-- [ ] `run_regression` trên `BenchmarkRunner` đã triển khai
-- [ ] `generate_improvement_log` trên `FailureAnalyzer` đã triển khai
-- [ ] `exercises.md` — golden dataset 20 QA (stratified) + benchmark results + rubric design
-- [ ] `reflection.md` — evaluation report với 3 failure analyses (5 Whys) + improvement log + CI/CD strategy
-- [ ] `solution/solution.py` — bản sao template.py đã hoàn chỉnh
+- [x] `pytest tests/ -v` — tất cả kiểm thử đều pass
+- [x] `overall_score` trên `EvalResult` đã triển khai
+- [x] `run_regression` trên `BenchmarkRunner` đã triển khai
+- [x] `generate_improvement_log` trên `FailureAnalyzer` đã triển khai
+- [x] `exercises.md` — golden dataset 20 QA (stratified) + benchmark results + rubric design
+- [x] `reflection.md` — evaluation report với 3 failure analyses (5 Whys) + improvement log + CI/CD strategy
+- [x] `solution/solution.py` — bản sao template.py đã hoàn chỉnh
 
 ---
 
@@ -245,6 +245,8 @@ python -m solution.check_quality_gate
 ```
 
 Kết quả benchmark được ghi vào `solution/benchmark_results.json` (UTF-8, schema: `rows`, `report`, `failures`, `rerank`, `suggestions`, `log`, `spread`).
+
+GitHub Actions uses `actions/checkout@v6` and `actions/setup-python@v6` with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to avoid the Node.js 20 deprecation warning.
 
 ## Repository Structure
 

@@ -17,6 +17,7 @@ Usage (from the day folder):
 from __future__ import annotations
 
 import json
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -523,6 +524,21 @@ def _fmt(v: float, digits: int = 3, signed: bool = False) -> str:
     return s
 
 
+
+
+def _get_output_path() -> Path:
+    """Return the benchmark JSON output path.
+
+    Default: ``solution/benchmark_results.json``. Tests can set
+    ``BENCHMARK_RESULTS_PATH`` to write to a temporary file, avoiding changes
+    to the tracked benchmark artifact during pytest runs.
+    """
+    override = os.environ.get("BENCHMARK_RESULTS_PATH")
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(__file__).resolve().parent / "benchmark_results.json"
+
+
 def main() -> None:
     runner = BenchmarkRunner()
     evaluator = RAGASEvaluator()
@@ -734,7 +750,8 @@ def main() -> None:
             for c in RERANK_CASES
         ],
     }
-    out_path = Path(__file__).resolve().parent / "benchmark_results.json"
+    out_path = _get_output_path()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     # Force UTF-8 explicitly: on Windows the default is cp1252, which
     # would re-encode characters like "—" as single bytes and lose fidelity.
     out_path.write_text(

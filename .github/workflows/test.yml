@@ -4,14 +4,19 @@ on:
   push:
   pull_request:
 
+# Opt in to Node.js 24 for JavaScript actions now. This avoids the Node.js 20
+# deprecation warning and matches the upcoming GitHub-hosted runner default.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -20,13 +25,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run unit tests
-        run: |
-          python -m pytest tests/ -v
-
       - name: Run benchmark
         run: |
           python -m solution.run_benchmark
+
+      - name: Run unit and smoke tests
+        env:
+          # The benchmark step above already generated solution/benchmark_results.json.
+          # Reuse it in CI so the smoke tests do not run the benchmark twice.
+          REUSE_BENCHMARK_RESULTS: "1"
+        run: |
+          python -m pytest tests/ -v
 
       - name: Run quality gate
         run: |

@@ -143,6 +143,13 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+
+
+def _md_cell(value: object) -> str:
+    """Escape values so generated Markdown table cells remain valid."""
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
 class RAGASEvaluator:
     """
     Evaluates RAG pipeline outputs using RAGAS-inspired heuristics.
@@ -419,6 +426,15 @@ class BenchmarkRunner:
             )
             # Preserve the original qa_pair (with retrieved_contexts etc.)
             result.qa_pair = pair
+            if pair.retrieved_contexts:
+                result.context_recall = evaluator.evaluate_context_recall(
+                    pair.retrieved_contexts,
+                    pair.expected_answer,
+                )
+                result.context_precision = evaluator.evaluate_context_precision(
+                    pair.retrieved_contexts,
+                    pair.expected_answer,
+                )
             results.append(result)
         return results
 
@@ -566,7 +582,12 @@ class FailureAnalyzer:
                 "TBD — review failure and add action"
             )
             lines.append(
-                f"| {failure_id} | {ftype} | {root} | {fix} | Open |"
+                "| "
+                f"{_md_cell(failure_id)} | "
+                f"{_md_cell(ftype)} | "
+                f"{_md_cell(root)} | "
+                f"{_md_cell(fix)} | "
+                "Open |"
             )
         return "\n".join(lines)
 

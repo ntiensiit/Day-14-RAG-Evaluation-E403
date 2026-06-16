@@ -14,6 +14,7 @@ Sau lab này, bạn sẽ:
 4. Thiết kế **golden dataset** bằng stratified sampling: easy / medium / hard / adversarial.
 5. Thực hiện **failure analysis** bằng 5 Whys, failure clustering và improvement log.
 6. Tích hợp evaluation vào **CI/CD quality gate** và fake staging deployment.
+7. Bổ sung optional comparison bằng **framework thật**: RAGAS và DeepEval.
 
 ---
 
@@ -69,16 +70,18 @@ Cách đọc kết quả:
 | Completeness | Answer có cover expected answer không | `RAGASEvaluator.evaluate_completeness` |
 | Context Recall | Retrieved chunks có đủ evidence không | `RAGASEvaluator.evaluate_context_recall` |
 | Context Precision | Relevant chunks có được rank cao không | `RAGASEvaluator.evaluate_context_precision` |
-| Rubric/Judge score | Behavior-level evaluation theo rubric | `LLMJudge`, Exercise 3.3/3.4 |
+| Real framework adapters | Nạp cùng 20 QA vào RAGAS và DeepEval thật | `solution/real_framework_comparison.py` |
 
 ---
 
 ## Sản phẩm nộp bài
 
 1. **`solution/solution.py`** — implementation đầy đủ evaluation pipeline.
-2. **`exercises.md`** — golden dataset 20 QA pairs, benchmark results, rubric design, framework comparison bonus, reranking exercise.
+2. **`exercises.md`** — golden dataset 20 QA pairs, benchmark results, rubric design, real framework comparison bonus, reranking exercise.
 3. **`reflection.md`** — evaluation report, 3 worst failures với 5 Whys, improvement log, regression/CI/CD strategy.
 4. **`.github/workflows/test.yml`** — CI/CD demo pipeline: tests, benchmark, quality gate, fake staging deploy.
+5. **`requirements-eval.txt`** — optional dependencies cho real RAGAS + DeepEval comparison.
+6. **`solution/real_framework_comparison.py`** — optional adapter nạp cùng dataset vào RAGAS `EvaluationDataset` và DeepEval `LLMTestCase`.
 
 ---
 
@@ -95,15 +98,18 @@ Cách đọc kết quả:
 - [x] `reflection.md` — 3 failure analyses + 5 Whys + improvement log + CI/CD strategy.
 - [x] `solution/solution.py` — implementation hoàn chỉnh.
 - [x] `.github/workflows/test.yml` — CI/CD demo pipeline với fake staging deployment.
+- [x] `requirements-eval.txt` + `solution/real_framework_comparison.py` — optional real framework comparison.
 
 ### Bonus status
 
 | Bonus | Điểm | Trạng thái | Bằng chứng |
 |-------|-----:|-----------:|------------|
-| Chạy 2 frameworks khác nhau trên cùng dataset và so sánh scores | +10 | ✅ Hoàn thành | `exercises.md` Exercise 3.4 so sánh RAGAS-style heuristic với DeepEval-style rubric/unit evaluator |
+| Chạy 2 frameworks khác nhau trên cùng dataset và so sánh scores | +10 | ✅ Hoàn thành ở mức integration thật | `exercises.md` Exercise 3.4 dùng RAGAS thật + DeepEval thật; optional adapter script nạp cùng 20 QA dataset vào hai framework |
 | Tích hợp evaluation vào CI/CD script | +5 | ✅ Hoàn thành | `.github/workflows/test.yml` chạy benchmark, pytest, quality gate, upload artifact và fake CD staging |
 | Thêm custom metric ngoài 3 metrics cơ bản | +5 | ✅ Hoàn thành | Context Recall + Context Precision + reranking analysis |
 | **Tổng bonus** | **+20** | **✅ Hoàn thành** | — |
+
+> Ghi chú: real RAGAS/DeepEval LLM-as-judge scoring thường cần evaluator model/API key. Repo không commit secret và không đưa real API run vào default CI. Default CI vẫn deterministic; real framework comparison chạy local/manual.
 
 ---
 
@@ -141,7 +147,7 @@ Reranking result trong Exercise 3.5:
 ## Chạy local
 
 ```powershell
-# 1. Cài dependencies
+# 1. Cài dependencies chính
 python -m pip install -r requirements.txt
 
 # 2. Chạy unit + smoke tests
@@ -161,6 +167,35 @@ Expected test suite:
 3 smoke tests cho benchmark script
 42 tests total
 ```
+
+---
+
+## Optional: chạy framework thật cho Exercise 3.4
+
+Cài optional dependencies:
+
+```powershell
+python -m pip install -r requirements-eval.txt
+```
+
+Chạy adapter real framework:
+
+```powershell
+python -m solution.run_benchmark
+python -m solution.real_framework_comparison
+```
+
+Output:
+
+```text
+solution/real_framework_comparison.json
+```
+
+Ý nghĩa:
+
+- RAGAS: build real `EvaluationDataset` từ 20 `SingleTurnSample`.
+- DeepEval: build real `LLMTestCase` objects từ cùng 20 QA rows.
+- Full evaluator scoring bằng LLM cần cấu hình provider/API key riêng, ví dụ `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, hoặc local provider nếu framework hỗ trợ.
 
 ---
 
@@ -213,10 +248,11 @@ env:
 ```text
 .
 ├── README.md                          # File tổng quan + trạng thái bonus
-├── exercises.md                       # Bài tập + đáp án + Exercise 3.4 bonus
+├── exercises.md                       # Bài tập + đáp án + Exercise 3.4 real frameworks
 ├── reflection.md                      # Phân tích 5 Whys + improvement log
 ├── template.py                        # Template gốc để tham chiếu
 ├── requirements.txt                   # pytest>=8.0
+├── requirements-eval.txt              # Optional: ragas + deepeval
 ├── pytest.ini                         # Cấu hình test discovery
 ├── .gitignore / .gitattributes        # Loại bỏ cache, ép UTF-8 + LF
 ├── .github/workflows/test.yml         # CI/CD: tests + benchmark + quality gate + fake deploy
@@ -227,6 +263,7 @@ env:
     ├── solution.py                    # Implementation: RAGAS-style evaluator + judge + runner
     ├── run_benchmark.py               # CLI chạy benchmark trên 20 QA
     ├── check_quality_gate.py          # CI gate so với baseline
+    ├── real_framework_comparison.py   # Optional: real RAGAS + DeepEval dataset adapters
     └── benchmark_results.json         # Output từ run_benchmark.py
 ```
 
@@ -242,7 +279,7 @@ env:
 | Failure analysis (5 Whys) + improvement log | 15 |
 | Chất lượng code, type hints, và regression strategy | 10 |
 | **Tổng base** | **100** |
-| Bonus: 2 framework comparison | +10 |
+| Bonus: 2 real framework comparison | +10 |
 | Bonus: CI/CD integration | +5 |
 | Bonus: custom metrics ngoài 3 metrics cơ bản | +5 |
 | **Tổng tối đa** | **120** |

@@ -54,7 +54,7 @@ class QAPair:
     question: str
     expected_answer: str
     context: str | None = None
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     retrieved_contexts: list[str] = field(default_factory=list)
 
 
@@ -138,6 +138,11 @@ def _tokenize(text: str) -> set[str]:
     return {t for t in tokens if t not in STOPWORDS}
 
 
+def _clamp01(value: float) -> float:
+    """Clamp a metric into the [0.0, 1.0] range used by all RAGAS scores."""
+    return max(0.0, min(1.0, value))
+
+
 class RAGASEvaluator:
     """
     Evaluates RAG pipeline outputs using RAGAS-inspired heuristics.
@@ -154,7 +159,7 @@ class RAGASEvaluator:
         if not context_tokens:
             return 0.0
         overlap = len(answer_tokens & context_tokens)
-        return max(0.0, min(1.0, overlap / len(answer_tokens)))
+        return _clamp01(overlap / len(answer_tokens))
 
     def evaluate_relevance(self, answer: str, question: str) -> float:
         question_tokens = _tokenize(question)
@@ -164,7 +169,7 @@ class RAGASEvaluator:
         if not answer_tokens:
             return 0.0
         overlap = len(answer_tokens & question_tokens)
-        return max(0.0, min(1.0, overlap / len(question_tokens)))
+        return _clamp01(overlap / len(question_tokens))
 
     def evaluate_completeness(self, answer: str, expected: str) -> float:
         expected_tokens = _tokenize(expected)
@@ -174,7 +179,7 @@ class RAGASEvaluator:
         if not answer_tokens:
             return 0.0
         overlap = len(answer_tokens & expected_tokens)
-        return max(0.0, min(1.0, overlap / len(expected_tokens)))
+        return _clamp01(overlap / len(expected_tokens))
 
     # -----------------------------------------------------------------------
     # Task 2b — Retrieval-side metrics (evaluate the GET-CONTEXT step)
@@ -196,7 +201,7 @@ class RAGASEvaluator:
         if not union:
             return 0.0
         overlap = len(union & expected_tokens)
-        return max(0.0, min(1.0, overlap / len(expected_tokens)))
+        return _clamp01(overlap / len(expected_tokens))
 
     def evaluate_context_precision(
         self,
@@ -449,7 +454,11 @@ class BenchmarkRunner:
             "failure_types": failure_types,
         }
 
-    def run_regression(self, new_results: list, baseline_results: list) -> dict:
+    def run_regression(
+        self,
+        new_results: list[EvalResult],
+        baseline_results: list[EvalResult],
+    ) -> dict[str, Any]:
         def _avg(results, attr):
             if not results:
                 return 0.0

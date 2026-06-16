@@ -228,9 +228,51 @@ pytest tests/ -v
 
 ---
 
+## Cách Reproduce
+
+```powershell
+# 1. Cài dependencies
+python -m pip install -r requirements.txt
+
+# 2. Chạy unit tests (39 test cho solution + 3 smoke test cho benchmark)
+python -m pytest tests/ -v
+
+# 3. Chạy benchmark trên 20 QA golden dataset
+python -m solution.run_benchmark
+
+# 4. (Tuỳ chọn) Chạy quality gate — fail nếu metric tụt dưới baseline
+python -m solution.check_quality_gate
+```
+
+Kết quả benchmark được ghi vào `solution/benchmark_results.json` (UTF-8, schema: `rows`, `report`, `failures`, `rerank`, `suggestions`, `log`, `spread`).
+
+## Repository Structure
+
+```text
+.
+├── README.md                          # File này
+├── exercises.md                       # Bài tập + đáp án
+├── reflection.md                      # Phân tích 5 Whys + improvement log
+├── template.py                        # Template gốc (giữ nguyên để tham chiếu)
+├── requirements.txt                   # pytest>=8.0
+├── pytest.ini                         # Cấu hình test discovery
+├── .gitignore / .gitattributes        # Loại bỏ cache, ép UTF-8 + LF
+├── .github/workflows/test.yml         # CI: tests + benchmark + quality gate
+├── tests/
+│   ├── test_solution.py               # 39 unit test cho solution.py
+│   └── test_run_benchmark.py          # 3 smoke test cho benchmark script
+└── solution/
+    ├── solution.py                    # Implementation: RAGAS-style evaluator
+    ├── run_benchmark.py               # CLI chạy benchmark trên 20 QA
+    ├── check_quality_gate.py          # CI gate so với baseline
+    └── benchmark_results.json         # Output từ run_benchmark.py
+```
+
+---
+
 ## Bonus (thêm điểm)
 
 - Chạy 2 frameworks khác nhau trên cùng dataset và so sánh scores (+10)
 - Tích hợp evaluation vào CI/CD script (GitHub Actions hoặc tương tự) (+5)
 - Thêm custom metric ngoài 3 metrics cơ bản (+5)
-# Day_14_RAG_Evaluation
+

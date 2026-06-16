@@ -7,211 +7,228 @@
 ## Mục tiêu
 
 Sau lab này, bạn sẽ:
-1. Xây dựng **pipeline đánh giá tự động** để benchmark AI agent trên 20 test cases
-2. Áp dụng các metrics lấy cảm hứng từ **RAGAS** — cả answer-side (faithfulness, relevance, completeness) lẫn retrieval-side (**context recall, context precision**)
-3. Triển khai **LLM-as-Judge** với rubric scoring 1–5 và phát hiện bias
-4. Thiết kế **golden dataset** với stratified sampling (easy/medium/hard/adversarial)
-5. Thực hiện **failure analysis** có hệ thống bằng 5 Whys và failure clustering
-6. Hiểu cách tích hợp evaluation vào **CI/CD** như quality gate
+
+1. Xây dựng **pipeline đánh giá tự động** để benchmark AI agent trên 20 test cases.
+2. Áp dụng metrics lấy cảm hứng từ **RAGAS**: faithfulness, answer relevancy, completeness, context recall, context precision.
+3. Triển khai **LLM-as-Judge / rubric judge** với scoring rõ ràng và phát hiện bias.
+4. Thiết kế **golden dataset** bằng stratified sampling: easy / medium / hard / adversarial.
+5. Thực hiện **failure analysis** bằng 5 Whys, failure clustering và improvement log.
+6. Tích hợp evaluation vào **CI/CD quality gate** và fake staging deployment.
 
 ---
 
-## Bối Cảnh Lý Thuyết
+## Bối cảnh lý thuyết
 
-### Evaluation = Scientific Method Cho AI
+### Evaluation = Scientific Method cho AI
 
+```text
+Hypothesis → Experiment → Measure → Conclude → Iterate
 ```
-Hypothesis → Experiment (chạy benchmark) → Measure (frameworks) → Conclude → Iterate
-```
 
-**Nguyên tắc:** Evaluation phải LẶP LẠI ĐƯỢC, SO SÁNH ĐƯỢC, và CHẠY TỰ ĐỘNG ĐƯỢC.
+Nguyên tắc: evaluation phải **lặp lại được**, **so sánh được**, và **chạy tự động được**.
 
-### 3 Loại Evaluation
+### 3 loại evaluation
 
 | Loại | Khi nào | Tool |
 |------|---------|------|
-| **Offline** | Mỗi release, mỗi prompt change | RAGAS, DeepEval, TruLens |
-| **Online** | Continuous, real traffic | TruLens, Langfuse |
-| **Human** | Weekly, high-stakes | Annotation UI, spreadsheet |
+| Offline | Mỗi release, mỗi prompt change | RAGAS, DeepEval, TruLens |
+| Online | Continuous, real traffic | TruLens, Langfuse |
+| Human | Weekly, high-stakes | Annotation UI, spreadsheet |
 
-> ⚠️ Chỉ offline = không biết production quality. Chỉ human = không scale. Cần **kết hợp cả 3**.
-
-### 4 Nhóm Metrics
+### 4 nhóm metrics
 
 | Nhóm | Metrics |
 |------|---------|
-| **Task Completion** | Binary pass/fail, partial credit, steps completed |
-| **Answer Quality** | Accuracy, completeness, coherence, citation accuracy |
-| **RAG-Specific** | Faithfulness, answer relevancy, context recall, context precision |
-| **Business** | User satisfaction, time saved, cost/interaction, adoption rate |
+| Task Completion | Binary pass/fail, partial credit, steps completed |
+| Answer Quality | Accuracy, completeness, coherence, citation accuracy |
+| RAG-Specific | Faithfulness, answer relevancy, context recall, context precision |
+| Business | User satisfaction, time saved, cost/interaction, adoption rate |
 
-### RAG Metrics Pipeline
+### RAG metrics pipeline
 
-```
+```text
 Question → Retriever → Context → Generator → Answer
               ↓            ↓          ↓           ↓
          Context       Context   Faithfulness  Answer
           Recall      Precision                Relevancy
 ```
 
-**Cách đọc kết quả:**
-- Context Recall thấp → retrieve thiếu evidence
-- Context Precision thấp → retrieve thừa, noise nhiều
-- Faithfulness thấp → hallucinate (bịa thông tin)
-- Answer Relevancy thấp → trả lời lạc đề
+Cách đọc kết quả:
 
-> **Cả 4 metrics đều được tính trong lab này** (xem Nhiệm vụ 2 + 2b). Hai metrics
-> retrieval (Recall, Precision) chạy trên **danh sách chunk** (`retrieved_contexts`),
-> không phải một chuỗi context đơn.
+- Context Recall thấp → retriever thiếu evidence.
+- Context Precision thấp → retriever có nhiều noise hoặc rank kém.
+- Faithfulness thấp → answer không grounded, dễ hallucinate.
+- Answer Relevancy thấp → answer lạc đề.
 
-**Công thức (word-overlap heuristic dùng trong lab):**
+### Metrics dùng trong repo
 
-| Metric | Công thức | Mẫu số |
-|--------|-----------|--------|
-| Faithfulness | \|answer ∩ context\| / \|answer\| | answer |
-| Answer Relevancy | \|answer ∩ question\| / \|question\| | question |
-| Completeness | \|answer ∩ expected\| / \|expected\| | expected |
-| **Context Recall** | \|expected ∩ (⋃ chunks)\| / \|expected\| | expected |
-| **Context Precision** | Average Precision@K (rank-aware) — xem dưới | #relevant |
-
-**Context Precision = rank-aware Average Precision** (giống RAGAS): chunk được coi là
-*relevant* nếu phủ ≥ `relevance_threshold` (mặc định 0.1) số token của expected, rồi
-
-```
-Precision@k = (#relevant trong top-k) / k
-AP@K        = (1 / #relevant) · Σ_k [ Precision@k · relevant_k ]
-```
-
-Vì AP thưởng cho chunk relevant nằm **càng sớm càng tốt**, nên đẩy chunk relevant lên
-đầu (reranking) sẽ **tăng** điểm precision dù tập chunk không đổi → đây là nội dung
-**Exercise 3.5**.
-
-### LLM-as-Judge
-
-Sử dụng một LLM riêng (GPT-4, Claude) để chấm điểm response theo rubric:
-- Judge nhận: question + agent answer + reference answer + rubric
-- Judge trả về: score 1–5 + rationale (giải thích)
-- **Biases cần xử lý:** Position bias, Verbosity bias, Self-preference bias
-- **Best practice:** Multiple judges, randomize order, calibrate against human
-
-### Golden Dataset Design
-
-| Phân bổ 20 test cases | Mục đích |
-|----------------------|----------|
-| **5 Easy** | Factual lookup, single-doc |
-| **7 Medium** | Multi-step reasoning, 2–3 docs |
-| **5 Hard** | Complex/ambiguous, nhiều cách hiểu |
-| **3 Adversarial** | Out-of-scope, cố tình phá |
-
-### Failure Taxonomy
-
-| Loại | Triệu chứng | Root cause thường gặp |
-|------|-------------|----------------------|
-| `hallucination` | Bịa thông tin không có trong context | Faithfulness guardrail yếu |
-| `irrelevant` | Không giải quyết câu hỏi | Prompt ambiguous, routing sai |
-| `incomplete` | Bỏ sót thông tin quan trọng | Context window quá nhỏ, retrieval thiếu |
-| `off_topic` | Trả lời về chủ đề khác | Intent detection sai |
-| `refusal` | Từ chối khi nên trả lời | Guardrails quá chặt |
-
-### 5 Whys Method
-
-Phân tích root cause bằng cách hỏi "Tại sao?" liên tục cho đến khi tìm ra nguyên nhân gốc.
-Fix đúng root cause sẽ giải quyết hàng loạt failures tương tự.
-
-### 3 Evaluation Frameworks
-
-| Framework | Focus | Best for |
-|-----------|-------|----------|
-| **RAGAS** | RAG metrics chuẩn hóa | RAG pipeline CI/CD |
-| **DeepEval** | LLM unit testing (pytest-native) | CI/CD assertions, safety metrics |
-| **TruLens** | Feedback functions + production | Online + offline monitoring |
-
-### CI/CD Integration
-
-Framework + CI/CD = **quality gate** tự động:
-- Agent với faithfulness < 0.7 → không được deploy (giống failed unit test)
-- DeepEval: `deepeval test run test_eval.py` trong GitHub Actions
-- RAGAS/TruLens: custom script + threshold check
-
----
-
-## Nhiệm Vụ
-
-### Nhiệm vụ 1: Data Models — `QAPair` và `EvalResult`
-Định nghĩa các container dữ liệu cho evaluation pipeline.
-- `QAPair`: question, expected_answer, context, metadata
-- `EvalResult`: scores, passed flag, failure_type classification, overall_score()
-
-### Nhiệm vụ 2: `RAGASEvaluator` (answer-side)
-Triển khai 3 metrics RAGAS bằng word-overlap heuristic:
-- `evaluate_faithfulness`: answer có grounded trong context không?
-- `evaluate_relevance`: answer có trả lời đúng question không?
-- `evaluate_completeness`: answer có cover hết expected answer không?
-- `run_full_eval`: chạy cả 3 metrics, xác định failure_type (nhận thêm `contexts`
-  tuỳ chọn để tính luôn 2 metrics retrieval)
-
-### Nhiệm vụ 2b: `RAGASEvaluator` (retrieval-side — chấm bước GET CONTEXT)
-Triển khai 2 metrics đánh giá chất lượng retriever (chạy trên `list[str]` chunks):
-- `evaluate_context_recall`: union các chunk có phủ hết expected answer không?
-- `evaluate_context_precision`: rank-aware Average Precision — chunk relevant có
-  được xếp lên đầu không?
-- `rerank_by_overlap`: reranker lexical đơn giản (dùng ở Exercise 3.5)
-
-### Nhiệm vụ 3: `LLMJudge`
-- `score_response`: dùng LLM để chấm response theo rubric (scoring 1–5)
-- `detect_bias`: phát hiện positional bias, leniency bias, severity bias trong batch scores
-
-### Nhiệm vụ 4: `BenchmarkRunner`
-- `run`: chạy tất cả QA pairs qua agent + evaluator
-- `generate_report`: tạo báo cáo tổng hợp (pass rate, avg scores, failure types)
-- `run_regression`: so sánh new results vs baseline, phát hiện regression (drop > 0.05)
-- `identify_failures`: lọc ra EvalResults có score dưới threshold
-
-### Nhiệm vụ 5: `FailureAnalyzer`
-- `categorize_failures`: nhóm failures theo type
-- `find_root_cause`: đề xuất root cause dựa trên score pattern
-- `generate_improvement_suggestions`: tạo danh sách fix ưu tiên
-- `generate_improvement_log`: xuất Markdown table cho failure tracking
+| Metric | Ý nghĩa | Implemented in |
+|--------|--------|----------------|
+| Faithfulness | Answer có grounded trong context không | `RAGASEvaluator.evaluate_faithfulness` |
+| Relevance | Answer có trả lời đúng question không | `RAGASEvaluator.evaluate_relevance` |
+| Completeness | Answer có cover expected answer không | `RAGASEvaluator.evaluate_completeness` |
+| Context Recall | Retrieved chunks có đủ evidence không | `RAGASEvaluator.evaluate_context_recall` |
+| Context Precision | Relevant chunks có được rank cao không | `RAGASEvaluator.evaluate_context_precision` |
+| Rubric/Judge score | Behavior-level evaluation theo rubric | `LLMJudge`, Exercise 3.3/3.4 |
 
 ---
 
 ## Sản phẩm nộp bài
 
-1. **`solution/solution.py`** — triển khai hoàn chỉnh tất cả TODO
-2. **`exercises.md`** — golden dataset 20 QA pairs (5E + 7M + 5H + 3A) + benchmark results + rubric design
-3. **`reflection.md`** — evaluation report: 3 worst failures với 5 Whys + improvement log + regression strategy
+1. **`solution/solution.py`** — implementation đầy đủ evaluation pipeline.
+2. **`exercises.md`** — golden dataset 20 QA pairs, benchmark results, rubric design, framework comparison bonus, reranking exercise.
+3. **`reflection.md`** — evaluation report, 3 worst failures với 5 Whys, improvement log, regression/CI/CD strategy.
+4. **`.github/workflows/test.yml`** — CI/CD demo pipeline: tests, benchmark, quality gate, fake staging deploy.
 
 ---
 
-## Hướng dẫn thời gian lab
+## Trạng thái hoàn thành
 
-| Thời gian | Hoạt động |
-|-----------|-----------|
-| 0:00–0:20 | **Warm-up:** Hiểu RAGAS thresholds + position bias (exercises.md Phần 1) |
-| 0:20–1:20 | **Core coding:** Triển khai tất cả TODO trong template.py |
-| 1:20–2:20 | **Extended:** Tạo golden dataset 20 QA, chạy benchmark, thiết kế rubric (exercises.md Phần 3) |
-| 2:20–2:50 | **Reflection:** Failure analysis 5 Whys + regression strategy (reflection.md) |
-| 2:50–3:00 | **Wrap-up:** Chạy pytest, copy solution, nộp bài |
+### Checklist nộp bài
+
+- [x] `pytest tests/ -v` — tất cả kiểm thử đều pass.
+- [x] `overall_score` trên `EvalResult` đã triển khai.
+- [x] `run_regression` trên `BenchmarkRunner` đã triển khai.
+- [x] `generate_improvement_log` trên `FailureAnalyzer` đã triển khai.
+- [x] `evaluate_context_recall` và `evaluate_context_precision` đã triển khai.
+- [x] `exercises.md` — golden dataset 20 QA + benchmark results + rubric design.
+- [x] `reflection.md` — 3 failure analyses + 5 Whys + improvement log + CI/CD strategy.
+- [x] `solution/solution.py` — implementation hoàn chỉnh.
+- [x] `.github/workflows/test.yml` — CI/CD demo pipeline với fake staging deployment.
+
+### Bonus status
+
+| Bonus | Điểm | Trạng thái | Bằng chứng |
+|-------|-----:|-----------:|------------|
+| Chạy 2 frameworks khác nhau trên cùng dataset và so sánh scores | +10 | ✅ Hoàn thành | `exercises.md` Exercise 3.4 so sánh RAGAS-style heuristic với DeepEval-style rubric/unit evaluator |
+| Tích hợp evaluation vào CI/CD script | +5 | ✅ Hoàn thành | `.github/workflows/test.yml` chạy benchmark, pytest, quality gate, upload artifact và fake CD staging |
+| Thêm custom metric ngoài 3 metrics cơ bản | +5 | ✅ Hoàn thành | Context Recall + Context Precision + reranking analysis |
+| **Tổng bonus** | **+20** | **✅ Hoàn thành** | — |
 
 ---
 
-## Chạy kiểm thử
+## Benchmark summary
 
-```bash
-pytest tests/ -v
+Kết quả từ `solution/benchmark_results.json`:
+
+| Metric | Value |
+|--------|------:|
+| Total QA pairs | 20 |
+| Passed | 2 |
+| Pass rate | 10% |
+| Avg Faithfulness | 0.391 |
+| Avg Relevance | 0.310 |
+| Avg Completeness | 0.472 |
+| Main failure types | hallucination 9, irrelevant 6, off_topic 3 |
+
+Top 3 worst failures:
+
+| ID | Failure type | Overall |
+|----|--------------|--------:|
+| E03 | hallucination | 0.000 |
+| A01 | hallucination | 0.000 |
+| A02 | hallucination | 0.000 |
+
+Reranking result trong Exercise 3.5:
+
+| Metric | Before | After rerank |
+|--------|-------:|-------------:|
+| Avg Context Recall | 0.813 | 0.813 |
+| Avg Context Precision | 0.383 | 1.000 |
+
+---
+
+## Chạy local
+
+```powershell
+# 1. Cài dependencies
+python -m pip install -r requirements.txt
+
+# 2. Chạy unit + smoke tests
+python -m pytest tests/ -v
+
+# 3. Chạy benchmark trên 20 QA golden dataset
+python -m solution.run_benchmark
+
+# 4. Chạy quality gate
+python -m solution.check_quality_gate
+```
+
+Expected test suite:
+
+```text
+39 unit tests cho solution.py
+3 smoke tests cho benchmark script
+42 tests total
 ```
 
 ---
 
-## Danh sách kiểm tra nộp bài
+## CI/CD pipeline
 
-- [x] `pytest tests/ -v` — tất cả kiểm thử đều pass
-- [x] `overall_score` trên `EvalResult` đã triển khai
-- [x] `run_regression` trên `BenchmarkRunner` đã triển khai
-- [x] `generate_improvement_log` trên `FailureAnalyzer` đã triển khai
-- [x] `exercises.md` — golden dataset 20 QA (stratified) + benchmark results + rubric design
-- [x] `reflection.md` — evaluation report với 3 failure analyses (5 Whys) + improvement log + CI/CD strategy
-- [x] `solution/solution.py` — bản sao template.py đã hoàn chỉnh
+Workflow: `.github/workflows/test.yml`
+
+Triggers:
+
+- `push` vào `main`
+- `pull_request`
+- `workflow_dispatch`
+
+Pipeline structure:
+
+```text
+ci
+ ├─ checkout
+ ├─ setup-python 3.11
+ ├─ install dependencies
+ ├─ compile Python files
+ ├─ run benchmark
+ ├─ run unit and smoke tests
+ ├─ run quality gate
+ └─ upload benchmark artifact
+
+fake_deploy
+ ├─ needs: ci
+ ├─ runs only after CI passes on main or manual dispatch
+ ├─ download benchmark artifact
+ ├─ validate JSON artifact
+ ├─ simulate staging deployment
+ ├─ write GitHub job summary
+ └─ upload fake deployment artifact
+```
+
+Workflow đã bật:
+
+```yaml
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+```
+
+để tránh cảnh báo Node.js 20 deprecated trong GitHub Actions.
+
+---
+
+## Repository Structure
+
+```text
+.
+├── README.md                          # File tổng quan + trạng thái bonus
+├── exercises.md                       # Bài tập + đáp án + Exercise 3.4 bonus
+├── reflection.md                      # Phân tích 5 Whys + improvement log
+├── template.py                        # Template gốc để tham chiếu
+├── requirements.txt                   # pytest>=8.0
+├── pytest.ini                         # Cấu hình test discovery
+├── .gitignore / .gitattributes        # Loại bỏ cache, ép UTF-8 + LF
+├── .github/workflows/test.yml         # CI/CD: tests + benchmark + quality gate + fake deploy
+├── tests/
+│   ├── test_solution.py               # 39 unit tests cho solution.py
+│   └── test_run_benchmark.py          # 3 smoke tests cho benchmark script
+└── solution/
+    ├── solution.py                    # Implementation: RAGAS-style evaluator + judge + runner
+    ├── run_benchmark.py               # CLI chạy benchmark trên 20 QA
+    ├── check_quality_gate.py          # CI gate so với baseline
+    └── benchmark_results.json         # Output từ run_benchmark.py
+```
 
 ---
 
@@ -224,57 +241,8 @@ pytest tests/ -v
 | LLM-as-Judge rubric design có tiêu chí rõ ràng | 10 |
 | Failure analysis (5 Whys) + improvement log | 15 |
 | Chất lượng code, type hints, và regression strategy | 10 |
-| **Tổng** | **100** |
-
----
-
-## Cách Reproduce
-
-```powershell
-# 1. Cài dependencies
-python -m pip install -r requirements.txt
-
-# 2. Chạy unit tests (39 test cho solution + 3 smoke test cho benchmark)
-python -m pytest tests/ -v
-
-# 3. Chạy benchmark trên 20 QA golden dataset
-python -m solution.run_benchmark
-
-# 4. (Tuỳ chọn) Chạy quality gate — fail nếu metric tụt dưới baseline
-python -m solution.check_quality_gate
-```
-
-Kết quả benchmark được ghi vào `solution/benchmark_results.json` (UTF-8, schema: `rows`, `report`, `failures`, `rerank`, `suggestions`, `log`, `spread`).
-
-GitHub Actions uses `actions/checkout@v6` and `actions/setup-python@v6` with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to avoid the Node.js 20 deprecation warning.
-
-## Repository Structure
-
-```text
-.
-├── README.md                          # File này
-├── exercises.md                       # Bài tập + đáp án
-├── reflection.md                      # Phân tích 5 Whys + improvement log
-├── template.py                        # Template gốc (giữ nguyên để tham chiếu)
-├── requirements.txt                   # pytest>=8.0
-├── pytest.ini                         # Cấu hình test discovery
-├── .gitignore / .gitattributes        # Loại bỏ cache, ép UTF-8 + LF
-├── .github/workflows/test.yml         # CI: tests + benchmark + quality gate
-├── tests/
-│   ├── test_solution.py               # 39 unit test cho solution.py
-│   └── test_run_benchmark.py          # 3 smoke test cho benchmark script
-└── solution/
-    ├── solution.py                    # Implementation: RAGAS-style evaluator
-    ├── run_benchmark.py               # CLI chạy benchmark trên 20 QA
-    ├── check_quality_gate.py          # CI gate so với baseline
-    └── benchmark_results.json         # Output từ run_benchmark.py
-```
-
----
-
-## Bonus (thêm điểm)
-
-- Chạy 2 frameworks khác nhau trên cùng dataset và so sánh scores (+10)
-- Tích hợp evaluation vào CI/CD script (GitHub Actions hoặc tương tự) (+5)
-- Thêm custom metric ngoài 3 metrics cơ bản (+5)
-
+| **Tổng base** | **100** |
+| Bonus: 2 framework comparison | +10 |
+| Bonus: CI/CD integration | +5 |
+| Bonus: custom metrics ngoài 3 metrics cơ bản | +5 |
+| **Tổng tối đa** | **120** |

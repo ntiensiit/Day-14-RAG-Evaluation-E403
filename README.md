@@ -15,6 +15,7 @@ Sau lab này, bạn sẽ:
 5. Thực hiện **failure analysis** bằng 5 Whys, failure clustering và improvement log.
 6. Tích hợp evaluation vào **CI/CD quality gate** và fake staging deployment.
 7. Bổ sung optional comparison bằng **framework thật**: RAGAS và DeepEval.
+8. Deploy demo trực quan bằng **FastAPI + HTML dashboard**.
 
 ---
 
@@ -71,6 +72,7 @@ Cách đọc kết quả:
 | Context Recall | Retrieved chunks có đủ evidence không | `RAGASEvaluator.evaluate_context_recall` |
 | Context Precision | Relevant chunks có được rank cao không | `RAGASEvaluator.evaluate_context_precision` |
 | Real framework adapters | Nạp cùng 20 QA vào RAGAS và DeepEval thật | `solution/real_framework_comparison.py` |
+| HTML demo API | Trực quan hoá benchmark/failures/reranking/CI pipeline | `demo_app/main.py` |
 
 ---
 
@@ -82,6 +84,8 @@ Cách đọc kết quả:
 4. **`.github/workflows/test.yml`** — CI/CD demo pipeline: tests, benchmark, quality gate, fake staging deploy.
 5. **`requirements-eval.txt`** — optional dependencies cho real RAGAS + DeepEval comparison.
 6. **`solution/real_framework_comparison.py`** — optional adapter nạp cùng dataset vào RAGAS `EvaluationDataset` và DeepEval `LLMTestCase`.
+7. **`demo_app/`** — FastAPI backend + HTML/CSS/JS dashboard để demo trực quan pipeline đánh giá.
+8. **`Dockerfile.demo`** — Docker entrypoint cho demo dashboard.
 
 ---
 
@@ -99,6 +103,7 @@ Cách đọc kết quả:
 - [x] `solution/solution.py` — implementation hoàn chỉnh.
 - [x] `.github/workflows/test.yml` — CI/CD demo pipeline với fake staging deployment.
 - [x] `requirements-eval.txt` + `solution/real_framework_comparison.py` — optional real framework comparison.
+- [x] `demo_app/` — FastAPI HTML dashboard cho demo trực quan.
 
 ### Bonus status
 
@@ -107,6 +112,7 @@ Cách đọc kết quả:
 | Chạy 2 frameworks khác nhau trên cùng dataset và so sánh scores | +10 | ✅ Hoàn thành ở mức integration thật | `exercises.md` Exercise 3.4 dùng RAGAS thật + DeepEval thật; optional adapter script nạp cùng 20 QA dataset vào hai framework |
 | Tích hợp evaluation vào CI/CD script | +5 | ✅ Hoàn thành | `.github/workflows/test.yml` chạy benchmark, pytest, quality gate, upload artifact và fake CD staging |
 | Thêm custom metric ngoài 3 metrics cơ bản | +5 | ✅ Hoàn thành | Context Recall + Context Precision + reranking analysis |
+| Demo trực quan bằng FastAPI + HTML | Extra | ✅ Hoàn thành | `demo_app/main.py`, `demo_app/templates/dashboard.html`, `requirements-demo.txt`, `Dockerfile.demo` |
 | **Tổng bonus** | **+20** | **✅ Hoàn thành** | — |
 
 > Ghi chú: real RAGAS/DeepEval LLM-as-judge scoring thường cần evaluator model/API key. Repo không commit secret và không đưa real API run vào default CI. Default CI vẫn deterministic; real framework comparison chạy local/manual.
@@ -166,6 +172,54 @@ Expected test suite:
 39 unit tests cho solution.py
 3 smoke tests cho benchmark script
 42 tests total
+```
+
+---
+
+## Demo trực quan bằng FastAPI + HTML
+
+Cài dependencies demo:
+
+```powershell
+python -m pip install -r requirements-demo.txt
+```
+
+Chạy benchmark để đảm bảo có dữ liệu mới nhất:
+
+```powershell
+python -m solution.run_benchmark
+```
+
+Chạy dashboard:
+
+```powershell
+uvicorn demo_app.main:app --reload
+```
+
+Mở trình duyệt:
+
+```text
+http://127.0.0.1:8000
+```
+
+Các endpoint API hỗ trợ demo:
+
+| Endpoint | Nội dung |
+|----------|----------|
+| `/` | HTML dashboard |
+| `/api/health` | Kiểm tra dữ liệu có tồn tại không |
+| `/api/summary` | Summary metrics |
+| `/api/rows` | 20 QA rows |
+| `/api/failures` | Failed rows + failure types |
+| `/api/rerank` | Context precision/recall before-after rerank |
+| `/api/frameworks` | Optional RAGAS + DeepEval adapter output |
+| `/api/pipeline` | Các bước pipeline demo |
+
+Docker demo:
+
+```powershell
+docker build -f Dockerfile.demo -t day14-eval-demo .
+docker run --rm -p 8000:8000 day14-eval-demo
 ```
 
 ---
@@ -252,10 +306,19 @@ env:
 ├── reflection.md                      # Phân tích 5 Whys + improvement log
 ├── template.py                        # Template gốc để tham chiếu
 ├── requirements.txt                   # pytest>=8.0
-├── requirements-eval.txt              # Optional: ragas + deepeval
+├── requirements-eval.txt              # Optional: ragas + deepeval + langchain extras
+├── requirements-demo.txt              # FastAPI + uvicorn + jinja2
+├── Dockerfile.demo                    # Container chạy dashboard demo
 ├── pytest.ini                         # Cấu hình test discovery
 ├── .gitignore / .gitattributes        # Loại bỏ cache, ép UTF-8 + LF
 ├── .github/workflows/test.yml         # CI/CD: tests + benchmark + quality gate + fake deploy
+├── demo_app/
+│   ├── main.py                        # FastAPI routes + JSON APIs
+│   ├── README.md                      # Hướng dẫn chạy dashboard
+│   ├── templates/dashboard.html       # HTML dashboard
+│   └── static/
+│       ├── styles.css                 # Dashboard CSS
+│       └── app.js                     # Filter/search table JS
 ├── tests/
 │   ├── test_solution.py               # 39 unit tests cho solution.py
 │   └── test_run_benchmark.py          # 3 smoke tests cho benchmark script
@@ -282,4 +345,5 @@ env:
 | Bonus: 2 real framework comparison | +10 |
 | Bonus: CI/CD integration | +5 |
 | Bonus: custom metrics ngoài 3 metrics cơ bản | +5 |
+| Extra: FastAPI HTML demo dashboard | demo |
 | **Tổng tối đa** | **120** |

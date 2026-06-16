@@ -1,5 +1,12 @@
 # Optional dependencies for real framework comparison.
 # These are intentionally kept out of requirements.txt so default CI remains fast,
 # offline, and deterministic.
+#
+# Notes:
+# - RAGAS may import LangChain community integrations during package import.
+# - langchain-community fixes: No module named 'langchain_community.chat_models.vertexai'.
+# - langchain-google-vertexai keeps the Vertex AI integration import path available for newer LangChain stacks.
 ragas
 deepeval
+langchain-community
+langchain-google-vertexai

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Day 14 · RAG Evaluation Demo</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">AI Evaluation & Benchmarking</p>
+      <h1>Day 14 · RAG Evaluation Pipeline</h1>
+      <p class="subtitle">
+        Demo trực quan cho golden dataset, benchmark metrics, failure analysis,
+        quality gate, CI/CD và optional real framework comparison.
+      </p>
+    </div>
+    <div class="hero-panel">
+      <div class="status-row">
+        <span class="status-dot {% if dashboard.benchmark_exists %}ok{% else %}bad{% endif %}"></span>
+        <span>{{ dashboard.benchmark_path }}</span>
+      </div>
+      <div class="status-row">
+        <span class="status-dot {% if dashboard.framework_exists %}ok{% else %}warn{% endif %}"></span>
+        <span>{{ dashboard.framework_path }}</span>
+      </div>
+      <code>uvicorn demo_app.main:app --reload</code>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid cards">
+      <article class="card metric-card">
+        <span>Total QA</span>
+        <strong>{{ dashboard.report.total }}</strong>
+        <small>Golden dataset</small>
+      </article>
+      <article class="card metric-card">
+        <span>Pass rate</span>
+        <strong>{{ (dashboard.report.pass_rate * 100) | round(1) }}%</strong>
+        <small>{{ dashboard.report.passed }} passed / {{ dashboard.report.failed }} failed</small>
+      </article>
+      <article class="card metric-card">
+        <span>Faithfulness</span>
+        <strong>{{ dashboard.report.avg_faithfulness }}</strong>
+        <small>Answer groundedness</small>
+      </article>
+      <article class="card metric-card">
+        <span>Relevance</span>
+        <strong>{{ dashboard.report.avg_relevance }}</strong>
+        <small>Answer vs question</small>
+      </article>
+      <article class="card metric-card">
+        <span>Completeness</span>
+        <strong>{{ dashboard.report.avg_completeness }}</strong>
+        <small>Answer vs expected</small>
+      </article>
+      <article class="card metric-card">
+        <span>Context Precision</span>
+        <strong>{{ dashboard.rerank_summary.avg_precision_before }} → {{ dashboard.rerank_summary.avg_precision_after }}</strong>
+        <small>Rerank delta +{{ dashboard.rerank_summary.delta }}</small>
+      </article>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Pipeline</p>
+          <h2>Evaluation flow</h2>
+        </div>
+        <a class="button" href="/api/summary" target="_blank">Open JSON summary</a>
+      </div>
+      <div class="pipeline">
+        {% for step in dashboard.pipeline_steps %}
+          <div class="pipeline-step">
+            <div class="step-index">{{ loop.index }}</div>
+            <h3>{{ step.name }}</h3>
+            <p>{{ step.detail }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="two-col">
+      <article class="card">
+        <p class="eyebrow">Failure Analysis</p>
+        <h2>Failure type distribution</h2>
+        {% for name, count in dashboard.report.failure_types.items() %}
+          <div class="bar-row">
+            <div class="bar-label">
+              <span>{{ name }}</span>
+              <strong>{{ count }}</strong>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: {{ (count / dashboard.report.total * 100) if dashboard.report.total else 0 }}%"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </article>
+
+      <article class="card">
+        <p class="eyebrow">Worst Cases</p>
+        <h2>Lowest overall scores</h2>
+        <div class="worst-list">
+          {% for row in dashboard.worst_rows %}
+            <div class="worst-item">
+              <div>
+                <strong>{{ row.id }}</strong>
+                <span>{{ row.question }}</span>
+              </div>
+              <code>{{ '%.3f'|format(row.overall) }}</code>
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Golden Dataset</p>
+          <h2>20 QA benchmark rows</h2>
+        </div>
+        <div class="filters">
+          <input id="searchBox" type="search" placeholder="Search ID, question, failure type...">
+          <select id="statusFilter">
+            <option value="all">All status</option>
+            <option value="pass">Pass</option>
+            <option value="fail">Fail</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Difficulty</th>
+              <th>Question</th>
+              <th>Faith.</th>
+              <th>Rel.</th>
+              <th>Comp.</th>
+              <th>Overall</th>
+              <th>Status</th>
+              <th>Failure</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in dashboard.rows %}
+              <tr data-status="{{ 'pass' if row.passed else 'fail' }}" data-search="{{ row.id }} {{ row.difficulty }} {{ row.question }} {{ row.failure_type }}">
+                <td><strong>{{ row.id }}</strong></td>
+                <td><span class="pill">{{ row.difficulty }}</span></td>
+                <td>{{ row.question }}</td>
+                <td>{{ '%.3f'|format(row.faithfulness) }}</td>
+                <td>{{ '%.3f'|format(row.relevance) }}</td>
+                <td>{{ '%.3f'|format(row.completeness) }}</td>
+                <td>{{ '%.3f'|format(row.overall) }}</td>
+                <td><span class="pill {{ 'pass' if row.passed else 'fail' }}">{{ 'PASS' if row.passed else 'FAIL' }}</span></td>
+                <td>{{ row.failure_type or '-' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <article class="card">
+        <p class="eyebrow">Reranking</p>
+        <h2>Context precision lift</h2>
+        <div class="rerank-metrics">
+          <div><span>Recall</span><strong>{{ dashboard.rerank_summary.avg_recall }}</strong></div>
+          <div><span>Precision before</span><strong>{{ dashboard.rerank_summary.avg_precision_before }}</strong></div>
+          <div><span>Precision after</span><strong>{{ dashboard.rerank_summary.avg_precision_after }}</strong></div>
+        </div>
+        <p class="muted">Reranking chỉ đổi thứ tự chunk, nên recall giữ nguyên nhưng precision tăng vì relevant chunk được đẩy lên đầu.</p>
+      </article>
+
+      <article class="card">
+        <p class="eyebrow">Real Frameworks</p>
+        <h2>RAGAS + DeepEval adapter</h2>
+        {% set adapters = dashboard.framework.get('framework_adapters', []) if dashboard.framework else [] %}
+        {% if adapters %}
+          {% for adapter in adapters %}
+            <div class="adapter-row">
+              <strong>{{ adapter.framework }}</strong>
+              <span class="pill {{ 'pass' if adapter.import_ok else 'fail' }}">
+                {{ 'OK' if adapter.import_ok else 'MISSING DEP' }}
+              </span>
+              <small>{{ adapter.dataset_items }} items · {{ adapter.notes }}</small>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted">Chưa có <code>solution/real_framework_comparison.json</code>. Chạy:</p>
+          <pre>python -m solution.real_framework_comparison</pre>
+        {% endif %}
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <span>Day 14 · AI Evaluation & Benchmarking</span>
+    <span>Data source: {{ dashboard.benchmark_path }}</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

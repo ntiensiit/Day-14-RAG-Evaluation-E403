@@ -86,14 +86,21 @@ def build_dashboard() -> dict[str, Any]:
 
     difficulty_counts = Counter(str(row.get("difficulty", "unknown")) for row in rows)
     category_counts = Counter(str(row.get("category", "unknown")) for row in rows)
-    worst_rows = sorted(rows, key=lambda row: (float(row.get("overall", 0.0)), str(row.get("id", ""))))[:5]
+    worst_rows = sorted(
+        rows,
+        key=lambda row: (float(row.get("overall", 0.0)), str(row.get("id", ""))),
+    )[:5]
 
     avg_precision_before = 0.0
     avg_precision_after = 0.0
     avg_recall = 0.0
     if rerank:
-        avg_precision_before = sum(float(item.get("precision_before", 0.0)) for item in rerank) / len(rerank)
-        avg_precision_after = sum(float(item.get("precision_after", 0.0)) for item in rerank) / len(rerank)
+        avg_precision_before = sum(
+            float(item.get("precision_before", 0.0)) for item in rerank
+        ) / len(rerank)
+        avg_precision_after = sum(
+            float(item.get("precision_after", 0.0)) for item in rerank
+        ) / len(rerank)
         avg_recall = sum(float(item.get("recall", 0.0)) for item in rerank) / len(rerank)
 
     pipeline_steps = [
@@ -140,9 +147,12 @@ def build_dashboard() -> dict[str, Any]:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request) -> HTMLResponse:
+    # Use keyword arguments for compatibility with newer Starlette/FastAPI.
+    # Positional TemplateResponse("dashboard.html", context) can be interpreted
+    # as TemplateResponse(request, name) and cause: TypeError: unhashable type: 'dict'.
     return templates.TemplateResponse(
-        "dashboard.html",
-        {
+        name="dashboard.html",
+        context={
             "request": request,
             "dashboard": build_dashboard(),
         },

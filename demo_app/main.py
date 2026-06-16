@@ -147,13 +147,10 @@ def build_dashboard() -> dict[str, Any]:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request) -> HTMLResponse:
-    # Use keyword arguments for compatibility with newer Starlette/FastAPI.
-    # Positional TemplateResponse("dashboard.html", context) can be interpreted
-    # as TemplateResponse(request, name) and cause: TypeError: unhashable type: 'dict'.
     return templates.TemplateResponse(
+        request=request,
         name="dashboard.html",
         context={
-            "request": request,
             "dashboard": build_dashboard(),
         },
     )
@@ -217,3 +214,4 @@ def api_pipeline() -> dict[str, Any]:
 @app.exception_handler(Exception)
 def handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"error": str(exc)})
+

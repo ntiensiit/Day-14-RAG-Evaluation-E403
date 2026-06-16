@@ -1,0 +1,32 @@
+{
+  "source": "solution\\benchmark_results.json",
+  "existing_benchmark_scores": {
+    "total": 20,
+    "passed": 2,
+    "pass_rate": 0.1,
+    "avg_faithfulness": 0.3905433455433455,
+    "avg_relevance": 0.3103968253968254,
+    "avg_completeness": 0.47182817724219717,
+    "top_zero_score_failures": [
+      "E03",
+      "A01",
+      "A02",
+      "A03"
+    ]
+  },
+  "framework_adapters": [
+    {
+      "framework": "RAGAS",
+      "import_ok": false,
+      "dataset_items": 0,
+      "notes": "ragas import failed: No module named 'langchain_community.chat_models.vertexai'"
+    },
+    {
+      "framework": "DeepEval",
+      "import_ok": true,
+      "dataset_items": 20,
+      "notes": "DeepEval LLMTestCase list built successfully."
+    }
+  ],
+  "full_eval_note": "This file verifies real framework adapters. Full RAGAS/DeepEval LLM scoring requires evaluator-model credentials and is intentionally not part of the default offline CI."
+}

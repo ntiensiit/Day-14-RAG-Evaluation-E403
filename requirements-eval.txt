@@ -1,0 +1,5 @@
+# Optional dependencies for real framework comparison.
+# These are intentionally kept out of requirements.txt so default CI remains fast,
+# offline, and deterministic.
+ragas
+deepeval
